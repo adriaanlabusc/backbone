@@ -1049,6 +1049,15 @@ $(document).ready(function() {
     equal(model.validationError, "This shouldn't happen");
   });
 
+  test("#2034 - nested set with silent only triggers one change", 1, function() {
+    var model = new Backbone.Model();
+    model.on('change', function() {
+      model.set({b: true}, {silent: true});
+      ok(true);
+    });
+    model.set({a: true});
+  });
+
   test("toJSON receives attrs during save(..., {wait: true})", 1, function() {
     var Model = Backbone.Model.extend({
       url: '/test',
@@ -1061,13 +1070,17 @@ $(document).ready(function() {
     model.save({x: 1}, {wait: true});
   });
 
-  test("#2034 - nested set with silent only triggers one change", 1, function() {
-    var model = new Backbone.Model();
-    model.on('change', function() {
-      model.set({b: true}, {silent: true});
-      ok(true);
+  test("attributes have old values during `request` event", 2, function() {
+    var model = new Backbone.Model({x: 1, y: 2});
+    model.url = '/test';
+    model.on('request', function() {
+      equal(model.get('x'), 1);
     });
-    model.set({a: true});
+    model.on('sync', function() {
+     equal(model.get('x'), 2);
+    });
+    model.save({x: 2}, {wait: true});
+    this.syncArgs.options.success({});
   });
 
 });

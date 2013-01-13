@@ -425,7 +425,7 @@
     // If the server returns an attributes hash that differs, the model's
     // state will be `set` again.
     save: function(key, val, options) {
-      var attrs, success, method, xhr, attributes = this.attributes;
+      var attrs, success, method, xhr;
 
       // Handle both `"key", value` and `{key: value}` -style arguments.
       if (key == null || typeof key === 'object') {
@@ -443,18 +443,11 @@
       // Do not persist invalid models.
       if (!this._validate(attrs, options)) return false;
 
-      // Set temporary attributes if `{wait: true}`.
-      if (attrs && options.wait) {
-        this.attributes = _.extend({}, attributes, attrs);
-      }
-
       // After a successful server-side save, the client is (optionally)
       // updated with the server-side state.
       if (options.parse === void 0) options.parse = true;
       success = options.success;
       options.success = function(model, resp, options) {
-        // Ensure attributes are restored during synchronous saves.
-        model.attributes = attributes;
         var serverAttrs = model.parse(resp, options);
         if (options.wait) serverAttrs = _.extend(attrs || {}, serverAttrs);
         if (_.isObject(serverAttrs) && !model.set(serverAttrs, options)) {
@@ -465,11 +458,12 @@
 
       // Finish configuring and sending the Ajax request.
       method = this.isNew() ? 'create' : (options.patch ? 'patch' : 'update');
-      if (method === 'patch') options.attrs = attrs;
+      if (method === 'patch') {
+        options.attrs = attrs;
+      } else if (attrs && options.wait) {
+        options.attrs = _.extend({}, this.attributes, attrs);
+      }
       xhr = this.sync(method, this, options);
-
-      // Restore attributes.
-      if (attrs && options.wait) this.attributes = attributes;
 
       return xhr;
     },
@@ -1379,7 +1373,7 @@
   // Useful when interfacing with server-side languages like **PHP** that make
   // it difficult to read the body of `PUT` requests.
   Backbone.sync = function(method, model, options) {
-    var type = methodMap[method];
+    var type = methodMap[method], attributes = model.attributes;
 
     // Default options, unless specified.
     _.defaults(options || (options = {}), {
@@ -1398,7 +1392,13 @@
     // Ensure that we have the appropriate request data.
     if (options.data == null && model && (method === 'create' || method === 'update' || method === 'patch')) {
       params.contentType = 'application/json';
-      params.data = JSON.stringify(options.attrs || model.toJSON(options));
+      if (options.wait && method !== 'patch') {
+        model.attributes = options.attrs;
+        params.data = JSON.stringify(model.toJSON(options));
+        model.attributes = attributes;
+      } else {
+        params.data = JSON.stringify(options.attrs || model.toJSON(options));
+      }
     }
 
     // For older servers, emulate JSON by encoding the request into an HTML-form.
